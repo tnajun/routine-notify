@@ -3,7 +3,17 @@
 # -Detail に詳しい中身（理由・選択肢・押したら何をするか）を書くと3行目に出る。改行は \n
 # -Link を付けると、通知本体か「開く」を押したときにそのClaudeセッションへ飛ぶ
 # Slack 投稿は任意: ~/.claude/slack-notify.json に {"botToken": "xoxb-...", "channel": "C..."} を置くと有効になる
-param([string]$Title = "Claudeから提案", [string]$Message = "", [string]$Detail = "", [string]$Link = "", [string]$SlackChannel = "")
+# -Kind fail で失敗として記録（タスクトレイの一覧で赤丸）。既定は go（オレンジ丸＝GO待ち）
+param([string]$Title = "Claudeから提案", [string]$Message = "", [string]$Detail = "", [string]$Link = "", [string]$SlackChannel = "", [ValidateSet('go','fail')][string]$Kind = "go")
+# タスクトレイの一覧（tray.ps1）用に、このセッションの状態を routine-status.json に書く
+if ($Link -match 'local_[0-9a-f-]+') {
+  try {
+    $sf = "$env:USERPROFILE\.claude\routine-status.json"
+    $st = if (Test-Path $sf) { [IO.File]::ReadAllText($sf) | ConvertFrom-Json } else { New-Object psobject }
+    $st | Add-Member -Force NoteProperty $Matches[0] ([pscustomobject]@{ state = $Kind; label = $Message; title = $Title; at = [DateTimeOffset]::Now.ToUnixTimeSeconds() })
+    [IO.File]::WriteAllText($sf, ($st | ConvertTo-Json -Depth 4 -Compress), (New-Object Text.UTF8Encoding $false))
+  } catch { Write-Warning "状態の記録に失敗: $_" }
+}
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 $esc = { param($s) [Security.SecurityElement]::Escape($s) }

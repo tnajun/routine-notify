@@ -23,9 +23,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\sk
 - `-Title`：ルーティン名
 - `-Message`：何をしてよいか／何を決めてほしいかを1行で
 - `-Detail`：理由・具体案・返事したら何が起きるかを `\n` 区切りで。「確認してください」だけは不可
+- `-Kind fail`：失敗して止まったときに付ける（タスクトレイの一覧で赤丸）。GO待ち・提案なら付けない（オレンジ丸）
 - 出力に「Slack投稿失敗」が出たら、報告にそう書く（トーストは出ている）
 
 ## 仕組みメモ
 - トーストは押すまで消えない（scenario=reminder）。集中モード中は通知センター直行
 - Slack は任意。`~/.claude/slack-notify.json` に `{"botToken": "xoxb-...", "channel": "C..."}` を置くと同じ内容を投稿する（`chat:write` 権限のbot）。`claude://` リンクはPCでのみ開ける
-- notify.ps1 はBOM付きUTF-8で保存すること（Windows PowerShell 5.1が日本語で構文エラーになる）
+- notify.ps1 / tray.ps1 はBOM付きUTF-8で保存すること（Windows PowerShell 5.1が日本語で構文エラーになる）
+- タスクトレイの一覧（tray.ps1）：時計の横の丸アイコン。青＝通常、オレンジ＋数字＝GO待ち、赤＝失敗。押すとルーティン一覧が開き、行を押すとそのセッションへ飛ぶ
+  - 状態は `~/.claude/routine-status.json`。`hooks/routine_status.py` が実行中・終了・承認待ちを、notify.ps1 がGO待ち・失敗を書く。GO待ちは本人がそのセッションで返事すると消える
