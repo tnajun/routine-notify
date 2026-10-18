@@ -1,5 +1,7 @@
 # routine-notify
 
+[English](README.en.md)
+
 ![使用イメージ](image.png)
 
 Claude Code（デスクトップアプリ）のルーティンが「GO待ち」「判断が必要」「失敗」になったとき、Windows の右下にトースト通知を出す Skill です。通知を押すと、そのセッションに飛べます。
