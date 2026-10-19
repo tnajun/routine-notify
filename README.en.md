@@ -56,7 +56,14 @@ powershell -STA -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$e
 
 To start it at sign-in, put a shortcut with this command in the Startup folder (`shell:startup`). If the icon lands in the hidden-icons area (`^`), drag it next to the clock.
 
-To pin a routine to the top of the list, put 📌 anywhere in its name; it gets a red pin. Remove 📌 to unpin.
+### Pinning
+
+Keep the routines you check often at the top of the list:
+
+1. In the Claude app, open the routine's detail page and edit its name with the pencil icon
+2. Put 📌 anywhere in the name and save (e.g. `[daily 9:40] 📌 Draft mail replies`)
+
+The routine then always sits at the top, whatever its state or schedule, with a red pin next to its name. Remove 📌 to unpin. The list re-sorts itself every 20 seconds, so no restart is needed.
 
 ### How it works
 
