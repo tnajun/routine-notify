@@ -56,6 +56,8 @@ powershell -STA -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$e
 
 To start it at sign-in, put a shortcut with this command in the Startup folder (`shell:startup`). If the icon lands in the hidden-icons area (`^`), drag it next to the clock.
 
+To pin a routine to the top of the list, put 📌 anywhere in its name; it gets a red pin. Remove 📌 to unpin.
+
 ### How it works
 
 - Routine names and schedules: the desktop app's own `scheduled-tasks.json`

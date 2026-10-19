@@ -39,6 +39,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File notify.ps1 -Title "テスト
 
 アイコンを押すとルーティン一覧が開きます（GO待ち・失敗・実行中・次の予定時刻）。行を押すと、そのセッションに飛びます。一覧の外を押すと閉じます。
 
+ルーティンの名前に 📌 を入れると、そのルーティンは一覧のいちばん上に固定され、赤いピンが付きます（ピン留め）。📌を消せば外れます。
+
 ### 1. 状態を記録するフックを入れる
 
 `hooks/routine_status.py` を `~/.claude/hooks/` に置き、`~/.claude/settings.json` の `hooks` に足します（Python 3 が必要）：

@@ -9,6 +9,7 @@ if (-not $mutex.WaitOne(0)) { exit }  # 二重起動しない
 
 $SESS = "$env:APPDATA\Claude\claude-code-sessions"
 $STATUS = "$env:USERPROFILE\.claude\routine-status.json"
+$PIN = [char]::ConvertFromUtf32(0x1F4CC)  # 📌
 $C = @{ go = [Drawing.Color]::FromArgb(245,158,11); fail = [Drawing.Color]::FromArgb(239,68,68); running = [Drawing.Color]::FromArgb(59,130,246); idle = [Drawing.Color]::FromArgb(196,201,208) }
 $script:sessions = @{}   # sessionId -> @{ task; created }
 $script:lastScan = [datetime]::MinValue
@@ -93,16 +94,18 @@ function Build-Rows {
         $best = @{ state = 'running'; label = ''; at = 0; sid = $mine[0].Key }
       }
     }
-    $name = $t.displayName -replace '^【[^】]*】', ''
+    # 名前に📌があればピン留め：一覧のいちばん上に固定し、📌は赤い印で描く（Labelはカラー絵文字を出せず☒になる）
+    $pinned = $t.displayName.Contains($PIN)  # $pin だと大文字小文字を区別せず $PIN を上書きする
+    $name = ($t.displayName -replace '^【[^】]*】', '').Replace($PIN, '').Trim()
     $sid = if ($best) { $best.sid } elseif ($mine) { $mine[0].Key } else { '' }
     if ($best) {
       $txt = @{ go = 'GO待ち'; fail = '失敗 ' + (Fmt ([DateTimeOffset]::FromUnixTimeSeconds([int64]$best.at).LocalDateTime)); running = '実行中' }[$best.state]
       if ($best.label -eq '承認待ち') { $txt = '承認待ち' }
-      $rows += [pscustomobject]@{ state = $best.state; name = $name; text = $txt; sid = $sid; sort = 0; tip = $best.label }
+      $rows += [pscustomobject]@{ state = $best.state; name = $name; text = $txt; sid = $sid; sort = 0; tip = $best.label; pin = $pinned }
     } else {
       $n = if ($t.cronExpression) { Next-Run $t.cronExpression } elseif ($t.fireAt -gt [DateTimeOffset]::Now.ToUnixTimeMilliseconds()) { [DateTimeOffset]::FromUnixTimeMilliseconds($t.fireAt).LocalDateTime }
       if (-not $n -and -not $t.cronExpression) { continue }  # 1回だけのルーティンで実行済みのものは出さない
-      $rows += [pscustomobject]@{ state = 'idle'; name = $name; text = $(if ($n) { '次 ' + (Fmt $n) } else { '予定なし' }); sid = $sid; sort = $(if ($n) { $n.Ticks } else { [int64]::MaxValue }); tip = $t.displayName }
+      $rows += [pscustomobject]@{ state = 'idle'; name = $name; text = $(if ($n) { '次 ' + (Fmt $n) } else { '予定なし' }); sid = $sid; sort = $(if ($n) { $n.Ticks } else { [int64]::MaxValue }); tip = $t.displayName; pin = $pinned }
     }
   }
   # ルーティン以外のセッションから notify.ps1 で出たGO待ち・失敗も並べる
@@ -113,7 +116,7 @@ function Build-Rows {
     }
   }
   $order = @{ go = 0; fail = 1; running = 2; idle = 3 }
-  @($rows | Sort-Object { $order[$_.state] }, sort)
+  @($rows | Sort-Object { -not $_.pin }, { $order[$_.state] }, sort)
 }
 
 # アイコンは色と数字の組み合わせごとに1回だけ作って使い回す。
@@ -146,6 +149,21 @@ $form.Width = Z 420
 $font = New-Object Drawing.Font 'Yu Gothic UI', 10
 $bold = New-Object Drawing.Font 'Yu Gothic UI', 10, ([Drawing.FontStyle]::Bold)
 $small = New-Object Drawing.Font 'Yu Gothic UI', 8.5
+# 赤い画びょう（📌）を自分で描く。絵文字の字体だと線だけの白抜きになるため。1枚だけ作って使い回す
+$script:pinImg = & {
+  $s = Z 22; $b = New-Object Drawing.Bitmap $s, $s
+  $g = [Drawing.Graphics]::FromImage($b); $g.SmoothingMode = 'AntiAlias'
+  $g.TranslateTransform($s / 2, $s / 2); $g.RotateTransform(40); $g.ScaleTransform($s / 22, $s / 22); $g.TranslateTransform(-10, -10)
+  $red = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(220,38,38)); $dark = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(170,20,20))
+  $needle = New-Object Drawing.Pen ([Drawing.Color]::FromArgb(110,110,120)), 1.6
+  $g.DrawLine($needle, 10, 14, 10, 21)
+  $g.FillPolygon($red, [Drawing.PointF[]]@((New-Object Drawing.PointF 7.5, 6), (New-Object Drawing.PointF 12.5, 6), (New-Object Drawing.PointF 14, 12.5), (New-Object Drawing.PointF 6, 12.5)))
+  $g.FillEllipse($dark, 4, 11.5, 12, 3.5)
+  $g.FillEllipse($red, 5, 0, 10, 7.5)
+  $g.FillEllipse([Drawing.Brushes]::White, 7.2, 1.6, 2.6, 2)
+  $g.Dispose(); $red.Dispose(); $dark.Dispose(); $needle.Dispose()
+  $b
+}
 $script:hiddenAt = [datetime]::MinValue
 $script:tip = New-Object Windows.Forms.ToolTip
 $form.Add_Deactivate({ $form.Hide(); $script:hiddenAt = Get-Date })
@@ -178,16 +196,21 @@ function Show-List {
     $p = New-Object Windows.Forms.Panel; $p.SetBounds(0, $y, $form.Width - (Z 22), $rowH)  # 右端はスクロールバーの分あける; $p.Tag = $r.sid; $p.Cursor = 'Hand'
     $dot = New-Object Windows.Forms.Label; $dot.Text = '●'; $dot.ForeColor = $C[$r.state]; $dot.Font = $font; $dot.SetBounds((Z 12), (Z 7), (Z 20), (Z 22))
     $nm = New-Object Windows.Forms.Label; $nm.Text = $r.name; $nm.Font = $font; $nm.SetBounds((Z 34), (Z 7), (Z 236), (Z 22)); $nm.AutoEllipsis = $true
+    $ctls = @($dot, $nm)
+    if ($r.pin) {
+      $pn = New-Object Windows.Forms.Label; $pn.Image = $script:pinImg; $pn.SetBounds((Z 32), (Z 6), (Z 24), (Z 24))
+      $nm.SetBounds((Z 56), (Z 7), (Z 214), (Z 22)); $ctls += $pn
+    }
     $tx = New-Object Windows.Forms.Label; $tx.Text = $r.text; $tx.Font = $font; $tx.SetBounds((Z 270), (Z 7), (Z 120), (Z 22)); $tx.TextAlign = 'MiddleRight'
     $tx.ForeColor = switch ($r.state) { 'go' { [Drawing.Color]::FromArgb(194,65,12) } 'fail' { [Drawing.Color]::FromArgb(185,28,28) } default { [Drawing.Color]::FromArgb(100,105,115) } }
-    foreach ($ctl in $p, $dot, $nm, $tx) {
+    foreach ($ctl in @($p, $tx) + $ctls) {
       $ctl.Tag = $r.sid
       $ctl.Add_Click({ Open-Session $this.Tag })
       $ctl.Add_MouseEnter({ $pp = if ($this -is [Windows.Forms.Panel]) { $this } else { $this.Parent }; $pp.BackColor = [Drawing.Color]::FromArgb(238,244,255) })
       $ctl.Add_MouseLeave({ $pp = if ($this -is [Windows.Forms.Panel]) { $this } else { $this.Parent }; $pp.BackColor = [Drawing.Color]::Transparent })
       if ($r.tip) { $tip.SetToolTip($ctl, $r.tip) }
     }
-    $p.Controls.AddRange(@($dot, $nm, $tx)); $form.Controls.Add($p); $y += $rowH
+    $p.Controls.AddRange(@($tx) + $ctls); $form.Controls.Add($p); $y += $rowH
   }
   $ft = New-Object Windows.Forms.Label; $ft.Text = '  行を押す → そのセッションが開く'; $ft.Font = $small
   $ft.ForeColor = [Drawing.Color]::Gray; $ft.BackColor = [Drawing.Color]::FromArgb(243,245,247); $ft.SetBounds(0, $y, $form.Width, (Z 28)); $ft.TextAlign = 'MiddleLeft'
